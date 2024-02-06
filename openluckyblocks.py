@@ -7,7 +7,7 @@ import keyboard
 # CONSTANTS
 PAUSE_KEY = "p"  # Key to pause execution
 WAIT_BEFORE_CLICK = 2  # Wait time in seconds before clicking
-WAIT_AFTER_CLICK = 3  # Wait time in seconds after clicking
+WAIT_AFTER_CLICK = 15  # Wait time in seconds after clicking
 
 def click():
     """Simulates a mouse click."""
