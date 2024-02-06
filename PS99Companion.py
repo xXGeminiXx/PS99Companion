@@ -53,7 +53,24 @@ class PetSimulatorAssistant(tk.Tk):
         feature_var.set(not feature_var.get())
 
     def toggle_fishing(self):
-        pass
+        if self.fishing_var.get():  # Corrected from self.fishing.get()
+            # Checkbox is checked, start fishing
+            self.start_fishing()
+        else:
+            # Checkbox is unchecked, stop fishing
+            self.stop_fishing()
+
+
+    def start_fishing(self):
+        # This method should initiate the process to open fishing.
+        # If calling an external script, consider using subprocess.Popen to allow it to run asynchronously.
+        self.fishing_process = subprocess.Popen(['python', 'fishing.py'])
+
+    def stop_fishing(self):
+        # This method should stop the process that opens fishing.
+        # If using subprocess.Popen, you can terminate the process.
+        if hasattr(self, 'fishing_process'):
+            self.fishing_process.terminate()
 
     def toggle_item_recognition(self):
         pass
