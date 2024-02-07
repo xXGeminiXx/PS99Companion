@@ -1,3 +1,25 @@
+import sys
+import subprocess
+
+def install(package):
+    subprocess.check_call([sys.executable, "-m", "pip", "install", package])
+
+# List of packages that need to be installed
+required_packages = [
+    "ttkbootstrap",
+    "pyautogui",
+    "keyboard",
+    "opencv-python",
+    "Pillow"  # PIL is part of Pillow
+]
+
+for package in required_packages:
+    try:
+        # Try to import the package, and if it's not found, install it
+        __import__(package.split()[0])
+    except ImportError:
+        install(package)
+
 import tkinter as tk
 from tkinter import ttk
 import ttkbootstrap as tb
@@ -62,7 +84,7 @@ class PetSimulatorAssistant(tk.Tk):
         pass
     def __init__(self):
         super().__init__()
-        self.title('Pet Simulator 99 Assistant by xXGeminiXx/BeeBrained')
+        self.title('Pet Simulator 99 Companion v3 by xXGeminiXx/BeeBrained')
         self.geometry('600x400')  # Window size can be adjusted as needed
 
         # Initialize the user interface.
@@ -85,9 +107,9 @@ class PetSimulatorAssistant(tk.Tk):
         # Set up checkboxes for each feature with commands to toggle them on and off
         ttk.Checkbutton(feature_frame, text='Fishing Bot', variable=self.fishing_var, 
                         onvalue=True, offvalue=False, command=self.toggle_fishing).pack(anchor='w')
-        ttk.Checkbutton(feature_frame, text='Item Recognition', variable=self.item_recognition_var, 
+        ttk.Checkbutton(feature_frame, text='Item Recognition', state='disabled', variable=self.item_recognition_var, 
                         onvalue=True, offvalue=False, command=self.toggle_item_recognition).pack(anchor='w')
-        ttk.Checkbutton(feature_frame, text='Buff Monitoring', variable=self.buff_monitor_var, 
+        ttk.Checkbutton(feature_frame, text='Buff Monitoring', state='disabled', variable=self.buff_monitor_var, 
                         onvalue=True, offvalue=False, command=self.toggle_buff_monitoring).pack(anchor='w')
         ttk.Checkbutton(feature_frame, text='Open Lucky Blocks', variable=self.lucky_block_var, 
                         onvalue=True, offvalue=False, command=self.toggle_lucky_blocks).pack(anchor='w')
