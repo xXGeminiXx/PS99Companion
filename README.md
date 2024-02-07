@@ -26,8 +26,7 @@ cd PS99Companion
 
 ### Installation
 
-Install the required Python packages:
-Packages will auto-install
+Required Packages will auto-install, just run the python file
 
 ### Usage
 
