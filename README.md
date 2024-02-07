@@ -14,6 +14,7 @@ PS99Companion is a Python-based automation tool designed to enhance the gaming e
 To get started with PS99Companion, clone this repository to your local machine and ensure you have Python installed.
 
 git clone https://github.com/xXGeminiXx/PS99Companion.git
+
 cd PS99Companion
 
 ### Prerequisites
