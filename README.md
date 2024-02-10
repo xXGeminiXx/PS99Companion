@@ -5,8 +5,8 @@ PS99Companion is a Python-based automation tool designed to enhance the gaming e
 ## Features
 
 - **Fishing Automation**: Automates the fishing process in the game.
-- **Item Recognition**: Recognizes and categorizes items within the game's inventory. - WIP using to make it auto find lucky blocks, and lord knows what else later
-- **Buff Monitoring**: Monitors active buffs and suggests or automatically applies necessary actions. - WIP - I will have auto pots/toys/fruits
+- **Item Recognition**: Recognizes and categorizes items within the game's inventory. - WIP used to make it auto farm lucky blocks, and lord knows what else later
+- **Buff Monitoring**: Monitors active buffs and suggests or automatically applies necessary actions. - WIP - I will have auto pots/toys/fruits, this is close to finished now, and will make the top one easier. 
 - **Lucky Blocks Opening**: Automates the process of opening lucky blocks.
 
 ## Getting Started
