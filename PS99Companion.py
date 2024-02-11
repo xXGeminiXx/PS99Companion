@@ -1,21 +1,23 @@
-import sys
-import subprocess
-import os
-import glob
-import fnmatch
+# Standard library imports
 import ctypes
-import tkinter as tk
-from tkinter import ttk
-import ttkbootstrap as tb
-from ttkbootstrap.constants import *
+import glob
+import os
+import re
 import subprocess
-import pyautogui
-import time
 import threading
-import keyboard
+import time
+from datetime import datetime, timedelta
+
+# Third-party imports
 import cv2
 import numpy as np
+import pyautogui
+import tkinter as tk
+import keyboard
 from PIL import Image, ImageGrab
+import ttkbootstrap as tb
+from ttkbootstrap.constants import *
+from tkinter import ttk
 
 def install(package):
     subprocess.check_call([sys.executable, "-m", "pip", "install", package])
@@ -62,76 +64,249 @@ def load_image(image_path):
         return None
 
 class PetSimulatorAssistant(tk.Tk):
+    fruit_color_ranges = {
+        'banana': ([25, 150, 50], [32, 255, 255]), # Example HSV lower and upper bounds
+        'apple': ([0, 150, 50], [5, 255, 255]),
+        'orange': ([10, 100, 100], [18, 255, 255]),
+        'pineapple': ([30, 150, 50], [35, 255, 255]),
+        'rainbow': ([40, 50, 50], [80, 255, 255])
+    }
+   
+    def __init__(self):
+        super().__init__()
+        self.title('Pet Simulator 99 Companion v5 by xXGeminiXx/BeeBrained')
+        self.geometry('200x300')  # Window size can be adjusted as needed 600x400 or blank to autosize
+        self.monitoring_active = False  
+        self.setup_hotkeys()  
+        self.image_found = {}  # To keep track of found images
+        self.load_reference_images()  # Make sure this is called before starting threads
+        self.debug_mode = False
+        self.fruit_usage_active = tk.BooleanVar(value=False)
+        self.reference_images = {}  # To keep track of reference images
+        self.protocol("WM_DELETE_WINDOW", self.on_close)
+
+        # Initialize the user interface.
+        self.init_ui()
+
+        self.wm_attributes('-topmost', 1)  # This will make the window stay on top
+        self.wm_attributes('-alpha', 0.9)  # Set initial transparency to 90%
+        # Transparency slider
+        self.transparency_scale = ttk.Scale(self, from_=0.1, to=1.0, value=0.9, command=self.change_transparency)
+        self.transparency_scale.pack(pady=5)
+        self.next_fruit_time = None
+
+        # Apply ttkbootstrap style to this root window
+        style = tb.Style(theme='cyborg')
+       
+    def capture_fruit_area(self):
+        # Define the region of the screen where the fruits appear
+        # This is an example and you may need to adjust the coordinates
+        fruit_region = (0, 0, 1920, 1080)  # Adjust to your specific screen area for fruits
+
+        # Path to save the screenshot
+        screenshot_path = os.path.join('C:\\Apps\\Automation Stuff\\PS99Companion\\reference_images', 'current_fruit.png')
+
+        # Take a screenshot of the defined region
+        screenshot = pyautogui.screenshot(region=fruit_region)
+        screenshot.save(screenshot_path)
+
+        return screenshot_path
 
     def load_reference_images(self):
-        self.reference_images = {'fruits': {}, 'potions': {}, 'toys': {}}
-        categories = ['fruits', 'potions', 'toys']  # Define your categories here
-        items = {
-            'fruits': ['Apple', 'Orange', 'Banana', 'Pineapple', 'Rainbow'],
-            'potions': ['Treasure Hunter', 'Damage', 'Coins', 'Luck', 'Speed', 'Diamonds'],
-            'toys': ['Tennis ball', 'Toy Bone', 'Squeeky Toy']
+        base_path = 'C:\\Apps\\Automation Stuff\\PS99Companion\\reference_images'
+        categories = {
+            'fruits': ['Banana.png', 'PS99_Apple.png', 'PS99_Orange.png', 'PS99_Pineapple.png', 'Rainbow.png'],
+            # Assume potions and toys handled elsewhere or not needed for current task
         }
-        base_path = 'C:\\Apps\\Automation Stuff\\PS99Companion\\reference_images'  # Define your base path here
-        print("Base Path:", base_path)  # Moved this print statement here for correct context
+        self.reference_images = {'fruits': {}, 'potions': {}, 'toys': {}}
 
-        supported_extensions = ['*.png', '*.jpg', '*.jpeg', '*.webp', '*.bmp', '*.tiff', '*.tif']
-
-        for category in categories:
-            for item in items[category]:
-                image_name = f"{item}.png"  # Assuming you want to load .png files
-                image_path = self.find_and_load_image(image_name, base_path)
-                if image_path:
-                    self.reference_images[category][item] = image_path
-                    self.image_found[item] = True  # Mark the image as found
+        for category, items in categories.items():
+            for item in items:
+                image_path = os.path.join(base_path, category, item)
+                if os.path.exists(image_path):
+                    self.reference_images[category][item[:-4]] = image_path  # Store without .png
                 else:
-                    self.image_found[item] = False  # Image not found
-                    print(f"Warning: Image file not found for {item} in category {category}.")
+                    print(f"Warning: Image file '{item}' not found for {category}")
+
+    def start_monitoring(self):
+        if not self.monitoring_active:
+            self.monitoring_active = True
+            print("Monitoring started.") if self.debug_mode else None
+            threading.Thread(target=self.monitor_fruits, daemon=True).start()
+            
+    def on_close(self):
+        # Custom shutdown sequence
+        self.stop_all()
+        self.destroy()  # This ensures the main window will close
+        os._exit(0)  # This ensures any lingering threads are killed
+
+    def stop_all(self):
+        # Stop all running features and update the status label
+        self.monitoring_active = False  # This will signal all threads to stop
+        self.update_status('Shutting down...', style='warning')
+        # Close any subprocess or threads if they are running
+        if hasattr(self, 'fishing_process') and self.fishing_process.poll() is None:
+            self.fishing_process.terminate()
+        if hasattr(self, 'lucky_blocks_process') and self.lucky_blocks_process.poll() is None:
+            self.lucky_blocks_process.terminate()
+        # Give a small delay to allow threads to terminate
+        time.sleep(0.5)
+        self.update_status('All features stopped', style='danger')
+        
+    def toggle_fruit_usage(self):
+        if self.fruit_usage_active.get():
+            self.monitoring_active = True
+            threading.Thread(target=self.monitor_fruits, daemon=True).start()
+        else:
+            self.monitoring_active = False
+
+    def monitor_fruits(self):
+        while self.monitoring_active and self.fruit_usage_active.get():
+            now = datetime.now()
+            if self.next_fruit_time is None or now >= self.next_fruit_time:
+                self.update_status("Opening inventory for fruit usage...", style="info")
+                self.open_inventory()
+                found_fruit = self.scan_and_use_fruit()
+                if not found_fruit:
+                    self.update_status("Fruit not found. Will retry...", style="warning")
+                else:
+                    self.next_fruit_time = now + timedelta(minutes=5)
+                    self.update_status(f"Fruit used. Next usage scheduled for {self.next_fruit_time.strftime('%H:%M:%S')}.", style="info")
+            time.sleep(5)  # Short sleep to keep the loop responsive
+
+
+    def scan_and_use_fruit(self):
+        confidence = 0.5
+        while confidence >= 0.5:  # Adjust as necessary
+            for fruit_name, image_path in self.reference_images['fruits'].items():
+                if self.debug_mode:
+                    self.update_status(f"Scanning for {fruit_name} at confidence: {confidence:.2f}", style="info")
+                location = pyautogui.locateCenterOnScreen(image_path, confidence=confidence)
+                if location:
+                    pyautogui.click(location)
+                    if self.debug_mode:
+                        self.update_status(f"Used {fruit_name} at {location}.", style="success")
+                    return True
+            confidence -= 0.5
+            if self.debug_mode:
+                self.update_status(f"No fruit found. Reducing confidence to {confidence:.2f}", style="info")
+        return False
+
+
+    def open_inventory(self):
+        # Simulate the key press to open inventory
+        print("Opening inventory.") if self.debug_mode else None
+        keyboard.press_and_release('f')  # Assuming 'i' opens the inventory
+        time.sleep(2)  # Wait for inventory to open
+
+    def toggle_debug_mode(self):
+        self.debug_mode = not self.debug_mode
+        print(f"Debug mode {'on' if self.debug_mode else 'off'}")
+
+    def stop_monitoring(self):
+        self.monitoring_active = False
+
+    def convert_webp_to_png(self, image_path):
+        """Converts a WEBP image to PNG format."""
+        try:
+            if image_path.lower().endswith('.webp'):
+                img = Image.open(image_path)
+                png_path = image_path.rsplit('.', 1)[0] + '.png'
+                img.save(png_path, 'PNG')
+                print(f"Converted {image_path} to PNG: {png_path}")
+                return png_path
+            else:
+                return image_path
+        except Exception as e:
+            print(f"Error converting {image_path} to PNG: {e}")
+            return image_path  # Return the original path if conversion fails
 
     def find_and_load_image(self, image_name, root_path='C:\\Apps\\Automation Stuff\\PS99Companion\\reference_images'):
-        # If the image has already been loaded, return the path
-        if image_name in loaded_images:
-            return loaded_images[image_name]
-        
-        # Recursively search for the image in the root path
+        print(f"Searching for: {image_name}")
+        search_pattern = re.compile(rf'(PS99_)?{re.escape(image_name.replace(" ", "_"))}.*\.(png|webp)$', re.IGNORECASE)
+
         for subdir, dirs, files in os.walk(root_path):
             for file in files:
-                if file.lower().endswith(('.png', '.webp')) and image_name.lower() in file.lower():
+                if search_pattern.match(file):
                     image_path = os.path.join(subdir, file)
-                    png_path = os.path.splitext(image_path)[0] + '.png'
-                    
-                    # Convert to PNG if it's a webp file
-                    if file.lower().endswith('.webp'):
-                        try:
-                            with Image.open(image_path) as img:
-                                img.save(png_path, 'PNG')
-                                print(f"Converted to PNG: {png_path}")
-                        except Exception as e:
-                            print(f"Error converting image '{image_path}' to PNG: {e}")
-                            continue  # Skip to the next file
+                    print(f"Found and will use: {image_path}")
+                    loaded_images[image_name] = image_path
+                    if file.endswith('.webp'):
+                        image_path = self.convert_webp_to_png(image_path)  # Correctly call within class
+                    return image_path
 
-                    loaded_images[image_name] = png_path
-                    return png_path
-        
-        # If the image was not found
         print(f"Image '{image_name}' not found in {root_path}")
         return None
-                    
+        
+    def find_fruits_by_color(self, image_path):
+        image = cv2.imread(image_path)
+        hsv_image = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
+
+        # Defining the ROI, bottom left 8th of the image
+        height, width, _ = image.shape
+        roi = (0, int(height*0.875), width//8, height)
+
+        # Cropping the image to the ROI
+        hsv_roi = hsv_image[roi[1]:roi[1]+roi[3], roi[0]:roi[0]+roi[2]]
+
+        for fruit, (hsv_lower, hsv_upper) in self.fruit_color_ranges.items():
+            # Special multi-color detection logic for rainbow fruit
+            if fruit == 'rainbow':
+                # Implement multi-color detection logic for rainbow fruit here
+                pass
+            else:
+                lower_bound = np.array(hsv_lower)
+                upper_bound = np.array(hsv_upper)
+
+                # Create a mask for the color range and find contours in the ROI
+                mask = cv2.inRange(hsv_roi, lower_bound, upper_bound)
+                contours, _ = cv2.findContours(mask, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+
+                for cnt in contours:
+                    area = cv2.contourArea(cnt)
+                    # Filter out contours that do not meet expected criteria
+                    if 100 < area < 10000:  # Adjust area thresholds as needed
+                        x, y, w, h = cv2.boundingRect(cnt)
+                        if 0.75 < w/h < 1.25:  # Adjust aspect ratio thresholds for fruit shapes
+                            x += roi[0]  # Adjust x to account for ROI
+                            y += roi[1]  # Adjust y to account for ROI
+                            cv2.rectangle(image, (x, y), (x + w, y + h), (0, 0, 255), 2)
+                            if self.debug_mode:
+                                cv2.putText(image, fruit, (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 0, 255), 2)
+                                cv2.imshow(f"{fruit} detected", image)
+                                cv2.waitKey(0)
+
+        # In debug mode, show the full image with all detections
+        if self.debug_mode:
+            cv2.imshow("All Detections", image)
+            cv2.waitKey(0)
+                
     def recognize_items(self, category):
         recognized_items = {}
         if hasattr(self, 'reference_images') and category in self.reference_images:
             for item, image_path in self.reference_images[category].items():
                 if image_path:
-                    # Start with a high confidence level and decrease as needed.
-                    # Example: Start with 0.9 and decrease in increments of 0.05.
                     confidence_level = 0.9
                     while confidence_level > 0.3:  # Adjust the lower limit as needed.
                         location = pyautogui.locateOnScreen(image_path, confidence=confidence_level)
                         if location:
+                            if self.debug_mode:
+                                print(f"Detected {item} with confidence {confidence_level}")
+                                self.show_detected_area(location)
                             recognized_items[item] = location
                             break  # If found, break out of the loop.
                         confidence_level -= 0.05  # Decrease confidence level.
         return recognized_items
-        
+
+    def show_detected_area(self, location):
+    # Draw a rectangle around the detected area
+        top_left_x, top_left_y, width, height = location
+        img = pyautogui.screenshot(region=(top_left_x, top_left_y, width, height))
+        img.show()
+    
+    def toggle_debug_mode(self):
+        self.debug_mode = not self.debug_mode
+        print(f"Debug mode {'on' if self.debug_mode else 'off'}")
 
     def check_for_banana(self):
         if not self.image_found.get('Banana', False):
@@ -151,26 +326,6 @@ class PetSimulatorAssistant(tk.Tk):
     def perform_buff_actions(self, recognized_buffs):
         # TODO: Implement actions based on recognized buffs
         pass
-    def __init__(self):
-        super().__init__()
-        self.title('Pet Simulator 99 Companion v4 by xXGeminiXx/BeeBrained')
-        self.geometry('200x300')  # Window size can be adjusted as needed 600x400 or blank to autosize
-        self.monitoring_active = False  
-        self.setup_hotkeys()  
-        self.image_found = {}  # To keep track of found images
-        self.load_reference_images()  # Make sure this is called before starting threads
-
-
-        # Initialize the user interface.
-        self.init_ui()
-        self.wm_attributes('-topmost', 1)  # This will make the window stay on top
-        self.wm_attributes('-alpha', 0.9)  # Set initial transparency to 90%
-        # Transparency slider
-        self.transparency_scale = ttk.Scale(self, from_=0.1, to=1.0, value=0.9, command=self.change_transparency)
-        self.transparency_scale.pack(pady=5)
-
-        # Apply ttkbootstrap style to this root window
-        style = tb.Style(theme='cyborg')
         
     def change_transparency(self, value):
         self.wm_attributes('-alpha', float(value))
@@ -182,6 +337,8 @@ class PetSimulatorAssistant(tk.Tk):
         keyboard.add_hotkey('ctrl+f2', self.toggle_item_recognition, suppress=True)
         keyboard.add_hotkey('ctrl+f3', self.toggle_buff_monitoring, suppress=True)
         keyboard.add_hotkey('ctrl+f4', self.toggle_lucky_blocks, suppress=True)
+        keyboard.add_hotkey('ctrl+d', self.toggle_debug_mode, suppress=True)
+
         # Update the GUI to show the hotkeys or print them to the console
         print("Global Hotkeys Activated")
 
@@ -190,6 +347,8 @@ class PetSimulatorAssistant(tk.Tk):
         if self.monitoring_active:
             self.check_for_buffs()
             self.after(1000, self.buff_monitoring_loop)
+            self.find_fruits_by_color(screenshot_path, fruit_color_ranges)
+
             
     def init_ui(self):
         # Initialize user interface components
@@ -203,6 +362,8 @@ class PetSimulatorAssistant(tk.Tk):
         self.lucky_block_var = tk.BooleanVar()
 
         # Set up checkboxes for each feature with commands to toggle them on and off
+        ttk.Checkbutton(feature_frame, text='Fruit Usage', variable=self.fruit_usage_active, 
+                        onvalue=True, offvalue=False, command=self.toggle_fruit_usage).pack(anchor='w')
         ttk.Checkbutton(feature_frame, text='Fishing Bot', variable=self.fishing_var, 
                         onvalue=True, offvalue=False, command=self.toggle_fishing).pack(anchor='w')
         ttk.Checkbutton(feature_frame, text='Item Recognition', state='disabled', variable=self.item_recognition_var, 
@@ -289,6 +450,10 @@ class PetSimulatorAssistant(tk.Tk):
         self.monitoring_active = True
         threading.Thread(target=self.buff_monitoring_loop, daemon=True).start()
 
+        # Take a screenshot of the fruit area and analyze colors
+        screenshot_path = self.capture_fruit_area()
+        self.find_fruits_by_color(screenshot_path)
+        
     def stop_buff_monitoring(self):
         self.monitoring_active = False  # This flag will stop the loop in `buff_monitoring_loop`
 
@@ -305,7 +470,6 @@ class PetSimulatorAssistant(tk.Tk):
                 return None
             screen = cv2.cvtColor(screen, cv2.COLOR_RGB2BGR)
             return screen
-
 
     def check_for_buffs(self):
         recognized_buffs = self.recognize_items('buffs')  # Call with one argument
@@ -328,6 +492,8 @@ class PetSimulatorAssistant(tk.Tk):
         keyboard.add_hotkey('ctrl+f2', self.toggle_item_recognition)
         keyboard.add_hotkey('ctrl+f3', self.toggle_buff_monitoring)
         keyboard.add_hotkey('ctrl+f4', self.toggle_lucky_blocks)
+        keyboard.add_hotkey('ctrl+d', self.toggle_debug_mode, suppress=True)
+
         # Update the GUI to show the hotkeys or print them to the console
         print("Hotkeys: \n - Ctrl+F1: Fishing\n - Ctrl+F2: Item Recognition\n - Ctrl+F3: Buff Monitoring\n - Ctrl+F4: Lucky Blocks")
 
@@ -378,3 +544,4 @@ if __name__ == '__main__':
     app = PetSimulatorAssistant()
     app.after(1000, app.buff_monitoring_loop)
     app.mainloop()
+    main()
