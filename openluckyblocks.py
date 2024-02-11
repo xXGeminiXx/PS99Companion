@@ -12,13 +12,11 @@ WAIT_BEFORE_CLICK = 2  # Wait time in seconds before clicking
 WAIT_AFTER_CLICK = 8.5  # Wait time in seconds after clicking
 
 def click():
-    """Simulates a mouse click with variable delay."""
     delay = random.uniform(CLICK_MIN_DELAY, CLICK_MAX_DELAY)
     time.sleep(delay)  # Variable delay before click
     pyautogui.click()
 
 def simulate_movement():
-    """Simulates movement in all four directions and returns to the original position."""
     keyboard.press_and_release('w')
     time.sleep(0.5)  # Simulates a short press
     keyboard.press_and_release('s')
