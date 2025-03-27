@@ -15,13 +15,14 @@ if !InStr(A_AhkVersion, "2.")
 
 ; ================== Configurable Items ==================
 INTERACTION_DURATION := 1000   ; How long to press keys in each window (ms)
-EXCLUDED_TITLES      := ["Account Manager"]  ; Window titles to exclude
-IDLE_SECONDS         := 30     ; How many seconds to wait between cycles
+EXCLUDED_TITLES      := ["Account Manager", "Chrome", "Firefox", "Edge", "Opera", "Brave", "Safari", "Internet Explorer", "Vivaldi"]  ; Window titles to exclude
+IDLE_SECONDS         := 300  ; How many seconds to wait between cycles
 
 ; ================== GUI Setup ==================
 myGUI := Gui("+AlwaysOnTop", "🐝Bee's Anti-AFK Macro 🐝")
 mainAction      := myGUI.Add("Text", "x10 y10  w380 h20", "🐝 Press F1 to start, F2 to stop, Esc to exit 🐝")
 secondaryAction := myGUI.Add("Text", "x10 y40  w380 h20", "Waiting to start...")
+statusText      := myGUI.Add("Text", "x10 y70  w380 h20", "Compatible with Bloxstrap and RAM")
 myGUI.Show("x0 y0 w400 h100")
 
 ; ================== Global Variables ==================
@@ -94,20 +95,62 @@ findRobloxWindows() {
 
     for _, hwnd in winList {
         title := WinGetTitle(hwnd)
-        if InStr(title, "Roblox") && !hasExcludedTitle(title) {
+        ; Skip any browser windows or other excluded titles
+        if isBrowserOrExcluded(title)
+            continue
+            
+        ; Check for various Roblox window names, including Bloxstrap
+        if (InStr(title, "Roblox") || InStr(title, "- Roblox") || RegExMatch(title, "Roblox$") || RegExMatch(title, "Roblox \(Place: \d+\)")) {
             robloxWindows.Push(hwnd)
+            statusText.Text := "Last detected window: " . title
         }
     }
+    
+    ; If no standard Roblox windows found, try looking for all windows with "experience" in the title
+    ; which may help detect Bloxstrap windows
+    if (robloxWindows.Length = 0) {
+        for _, hwnd in winList {
+            title := WinGetTitle(hwnd)
+            ; Skip any browser windows or other excluded titles
+            if isBrowserOrExcluded(title)
+                continue
+                
+            if (InStr(title, "experience") || InStr(title, "Experience")) {
+                robloxWindows.Push(hwnd)
+                statusText.Text := "Last detected window: " . title
+            }
+        }
+    }
+    
     return robloxWindows
 }
 
-hasExcludedTitle(title) {
+isBrowserOrExcluded(title) {
     global EXCLUDED_TITLES
+    
+    ; Check specifically excluded titles
     for excluded in EXCLUDED_TITLES {
         if InStr(title, excluded) {
             return true
         }
     }
+    
+    ; Additional browser detection logic
+    if (RegExMatch(title, " - Chrome$") || 
+        RegExMatch(title, " - Edge$") ||
+        RegExMatch(title, " - Firefox$") ||
+        RegExMatch(title, " - Opera$") ||
+        RegExMatch(title, " - Brave$") ||
+        RegExMatch(title, " - Safari$") ||
+        InStr(title, "Firefox") ||
+        InStr(title, "Chrome") ||
+        InStr(title, "Opera") ||
+        InStr(title, "Brave") ||
+        InStr(title, "Safari") ||
+        InStr(title, "Edge")) {
+        return true
+    }
+    
     return false
 }
 
@@ -116,7 +159,7 @@ interactWithWindow(hwnd) {
 
     WinActivate(hwnd)
     WinWaitActive(hwnd, 2) ; Wait up to 2s for the window to be active
-    secondaryAction.Text := Format("Interacting with window: {1}", hwnd)
+    secondaryAction.Text := Format("Interacting with window: {1}", WinGetTitle(hwnd))
 
     startTime := A_TickCount
     while (A_TickCount - startTime < INTERACTION_DURATION && running) {
