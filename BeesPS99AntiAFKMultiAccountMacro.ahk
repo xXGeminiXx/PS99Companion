@@ -3,6 +3,13 @@
 ; https://www.youtube.com/@BeeBrained-PS99
 ; https://discord.gg/QVncFccwek
 ; https://autohotkey.com/ Version 2 required.
+; Updates: 
+; 2024-01-03: Added Bloxstrap compatibility - improved window detection for both launchers
+; 2024-01-03: Added browser exclusion to prevent interacting with web pages
+; 2024-01-03: Added debug mode to show which windows are detected
+; 2024-01-03: Enhanced detection with multiple methods (exact title, process name, pattern matching)
+; 2024-01-03: Improved GUI to show more detailed status information
+
 
 ; ================== Optional Version Check ==================
 ; Instead of a numeric comparison, just check if it starts with "2."
@@ -17,13 +24,14 @@ if !InStr(A_AhkVersion, "2.")
 INTERACTION_DURATION := 1000   ; How long to press keys in each window (ms)
 EXCLUDED_TITLES      := ["Account Manager", "Chrome", "Firefox", "Edge", "Opera", "Brave", "Safari", "Internet Explorer", "Vivaldi"]  ; Window titles to exclude
 IDLE_SECONDS         := 300  ; How many seconds to wait between cycles
+DEBUG_MODE           := true  ; Show window titles for debugging
 
 ; ================== GUI Setup ==================
 myGUI := Gui("+AlwaysOnTop", "🐝Bee's Anti-AFK Macro 🐝")
 mainAction      := myGUI.Add("Text", "x10 y10  w380 h20", "🐝 Press F1 to start, F2 to stop, Esc to exit 🐝")
 secondaryAction := myGUI.Add("Text", "x10 y40  w380 h20", "Waiting to start...")
-statusText      := myGUI.Add("Text", "x10 y70  w380 h20", "Compatible with Bloxstrap and RAM")
-myGUI.Show("x0 y0 w400 h100")
+statusText      := myGUI.Add("Text", "x10 y70  w380 h60", "Compatible with Bloxstrap and RAM")
+myGUI.Show("x0 y0 w400 h140")
 
 ; ================== Global Variables ==================
 global running := false   ; Tracks whether the macro is active
@@ -45,6 +53,22 @@ startMacro() {
     running := true
     mainAction.Text      := "🐝 Macro is running 🐝🐝🐝"
     secondaryAction.Text := "Finding Roblox windows..."
+    
+    ; Debug - list all window titles to help with detection
+    if (DEBUG_MODE) {
+        try {
+            allWindows := WinGetList()
+            debugInfo := "All windows:`n"
+            for _, hwnd in allWindows {
+                title := WinGetTitle(hwnd)
+                if (title != "")
+                    debugInfo .= title . "`n"
+            }
+            statusText.Text := debugInfo
+        } catch {
+            statusText.Text := "Error listing windows"
+        }
+    }
 
     ; Main loop: Continue cycling as long as we're running.
     while running {
@@ -86,6 +110,8 @@ stopMacro() {
 
 findRobloxWindows() {
     robloxWindows := []
+    foundTitles := ""
+    
     try {
         winList := WinGetList()  ; Returns an array of HWNDs in v2
     } catch {
@@ -95,31 +121,48 @@ findRobloxWindows() {
 
     for _, hwnd in winList {
         title := WinGetTitle(hwnd)
+        procName := WinGetProcessName(hwnd)
+        
+        ; Skip if the window has no title
+        if (title = "")
+            continue
+            
         ; Skip any browser windows or other excluded titles
         if isBrowserOrExcluded(title)
             continue
             
-        ; Check for various Roblox window names, including Bloxstrap
-        if (InStr(title, "Roblox") || InStr(title, "- Roblox") || RegExMatch(title, "Roblox$") || RegExMatch(title, "Roblox \(Place: \d+\)")) {
+        ; Method 1: Match by exact name "Roblox" (standard title used by both launchers)
+        if (title = "Roblox") {
             robloxWindows.Push(hwnd)
-            statusText.Text := "Last detected window: " . title
+            foundTitles .= "Found: " . title . " (Process: " . procName . ")`n"
+            continue
+        }
+        
+        ; Method 2: Check for RobloxPlayerBeta.exe process
+        if (InStr(procName, "RobloxPlayerBeta.exe")) {
+            robloxWindows.Push(hwnd)
+            foundTitles .= "Found: " . title . " (Process: " . procName . ")`n"
+            continue
+        }
+        
+        ; Method 3: Various patterns used in Roblox titles
+        if (InStr(title, "Roblox") || 
+            InStr(title, "- Roblox") || 
+            RegExMatch(title, "Roblox$") || 
+            RegExMatch(title, "Roblox \(Place: \d+\)") ||
+            InStr(title, "experience") || 
+            InStr(title, "Experience")) {
+            
+            robloxWindows.Push(hwnd)
+            foundTitles .= "Found: " . title . " (Process: " . procName . ")`n"
         }
     }
     
-    ; If no standard Roblox windows found, try looking for all windows with "experience" in the title
-    ; which may help detect Bloxstrap windows
-    if (robloxWindows.Length = 0) {
-        for _, hwnd in winList {
-            title := WinGetTitle(hwnd)
-            ; Skip any browser windows or other excluded titles
-            if isBrowserOrExcluded(title)
-                continue
-                
-            if (InStr(title, "experience") || InStr(title, "Experience")) {
-                robloxWindows.Push(hwnd)
-                statusText.Text := "Last detected window: " . title
-            }
-        }
+    if (DEBUG_MODE) {
+        if (foundTitles != "")
+            statusText.Text := foundTitles
+        else
+            statusText.Text := "No Roblox windows detected"
     }
     
     return robloxWindows
@@ -135,7 +178,7 @@ isBrowserOrExcluded(title) {
         }
     }
     
-    ; Additional browser detection logic
+    ; Additional browser detection patterns
     if (RegExMatch(title, " - Chrome$") || 
         RegExMatch(title, " - Edge$") ||
         RegExMatch(title, " - Firefox$") ||
@@ -157,9 +200,10 @@ isBrowserOrExcluded(title) {
 interactWithWindow(hwnd) {
     global INTERACTION_DURATION, running
 
+    title := WinGetTitle(hwnd)
     WinActivate(hwnd)
     WinWaitActive(hwnd, 2) ; Wait up to 2s for the window to be active
-    secondaryAction.Text := Format("Interacting with window: {1}", WinGetTitle(hwnd))
+    secondaryAction.Text := Format("Interacting with window: {1}", title)
 
     startTime := A_TickCount
     while (A_TickCount - startTime < INTERACTION_DURATION && running) {
