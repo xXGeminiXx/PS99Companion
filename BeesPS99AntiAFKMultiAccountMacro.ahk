@@ -4,11 +4,11 @@
 ; https://discord.gg/QVncFccwek
 ; https://autohotkey.com/ Version 2 required.
 ; Updates: 
-; 2024-01-03: Added Bloxstrap compatibility - improved window detection for both launchers
-; 2024-01-03: Added browser exclusion to prevent interacting with web pages
-; 2024-01-03: Added debug mode to show which windows are detected
-; 2024-01-03: Enhanced detection with multiple methods (exact title, process name, pattern matching)
-; 2024-01-03: Improved GUI to show more detailed status information
+; 2025-03-27: Added Bloxstrap compatibility - improved window detection for both launchers
+; 2025-03-27: Added browser exclusion to prevent interacting with web pages
+; 2025-03-27: Added debug mode to show which windows are detected
+; 2025-03-27: Enhanced detection with multiple methods (exact title, process name, pattern matching)
+; 2025-03-27: Improved GUI to show more detailed status information
 
 
 ; ================== Optional Version Check ==================
